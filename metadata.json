@@ -1,0 +1,6 @@
+{
+  "name": "Encontre sua Conexão",
+  "description": "Plataforma inteligente de conexões autênticas: relacionamentos com sintonia, novas amizades e networking profissional.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
