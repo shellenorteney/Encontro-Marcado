@@ -1,310 +1,76 @@
-import React, { useState } from 'react';
-import {
-  CheckCircle2,
-  Heart,
-  Sparkles,
-  Phone,
-  Instagram,
-  ShieldCheck,
-  ExternalLink,
-  MessageCircle,
-  Home,
-  Calendar,
-  MapPin
-} from 'lucide-react';
-import { UserProfile, MatchPair } from '../types/profile';
-import { buildWhatsAppLink } from '../utils/matchEngine';
+import React from 'react';
+import { CheckCircle2, Heart, Home, RefreshCw, Lock, Phone, Instagram } from 'lucide-react';
+import type { UserProfile } from '../types/profile';
+import type { SharedMatch } from '../services/participants';
 
 interface SuccessAndMatchViewProps {
   currentUser: UserProfile;
-  foundMatches: MatchPair[];
+  matches: SharedMatch[];
+  sessionSaved: boolean;
+  refreshing: boolean;
+  pendingMatch: string | null;
+  error: string | null;
+  onRefresh: () => void;
+  onAccept: (matchId: string) => void;
   onBackToHome: () => void;
-  onUpdateMatchAcceptance: (matchId: string, userAAccepted: boolean, userBAccepted: boolean) => void;
 }
 
 export const SuccessAndMatchView: React.FC<SuccessAndMatchViewProps> = ({
-  currentUser,
-  foundMatches,
-  onBackToHome,
-  onUpdateMatchAcceptance,
-}) => {
-  const topMatch = foundMatches[0] || null;
+  currentUser, matches, sessionSaved, refreshing, pendingMatch, error, onRefresh, onAccept, onBackToHome,
+}) => (
+  <div className="min-h-screen bg-paper py-4 sm:py-8 px-3 sm:px-4 [&_button]:min-h-11 [&_a]:min-h-11 [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-[#0B4A72]">
+    <main className="w-full max-w-xl mx-auto bg-[#FFFDF9] rounded-3xl p-4 sm:p-8 border border-[#E7E0D3] shadow-xl shadow-[#0B4A72]/5">
+      <header className="text-center">
+        <span className="font-script text-3xl text-[#D92B27] font-bold">Encontro Marcado</span>
+        <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto mt-5 mb-3" />
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2 break-words">Perfil cadastrado, {currentUser.name}!</h1>
+        <p className="text-sm text-[#6E675D]">Seu cadastro foi salvo no sistema da atividade. Você já pode acompanhar as compatibilidades com outros participantes.</p>
+      </header>
 
-  // Track user's own acceptance state and simulated partner acceptance
-  const isUserA = topMatch ? topMatch.userA.id === currentUser.id : false;
-  const partnerUser = topMatch ? (isUserA ? topMatch.userB : topMatch.userA) : null;
-
-  const [myAccepted, setMyAccepted] = useState(
-    topMatch ? (isUserA ? topMatch.userAAccepted : topMatch.userBAccepted) : false
-  );
-  const [partnerAccepted, setPartnerAccepted] = useState(
-    topMatch ? (isUserA ? topMatch.userBAccepted : topMatch.userAAccepted) : false
-  );
-
-  const bothAccepted = myAccepted && partnerAccepted;
-
-  const handleAcceptMyShare = () => {
-    setMyAccepted(true);
-    // Simulate partner also accepting after 800ms for testing flow
-    setTimeout(() => {
-      setPartnerAccepted(true);
-      if (topMatch) {
-        onUpdateMatchAcceptance(topMatch.id, true, true);
-      }
-    }, 800);
-  };
-
-  const whatsappLink = topMatch && partnerUser
-    ? buildWhatsAppLink(currentUser, partnerUser)
-    : '';
-
-  return (
-    <div className="min-h-screen bg-paper py-8 px-4 flex flex-col items-center justify-center">
-      <div className="w-full max-w-xl bg-[#FFFDF9] rounded-3xl p-6 sm:p-8 border border-[#E7E0D3] shadow-xl shadow-[#0B4A72]/5 text-center">
-        
-        {/* Event Header */}
-        <div className="flex items-center justify-between pb-4 mb-5 border-b border-[#F0EAE0]">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-black uppercase tracking-wider text-[#0B4A72] bg-[#0B4A72]/10 px-2.5 py-0.5 rounded-full">
-              Caxingui + SP Norte
-            </span>
-            <span className="font-script text-2xl text-[#D92B27] font-bold">
-              Encontro Marcado
-            </span>
-          </div>
-
-          <div className="text-[11px] font-bold text-[#D92B27] flex items-center gap-1">
-            <Calendar className="w-3.5 h-3.5" />
-            <span>14 Nov · 17h30</span>
-          </div>
-        </div>
-
-        {/* Success Icon */}
-        <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4 border border-emerald-100">
-          <CheckCircle2 className="w-8 h-8" />
-        </div>
-
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-[#242220] tracking-tight mb-2">
-          Perfil Cadastrado com Sucesso!
-        </h1>
-
-        <p className="text-xs sm:text-sm text-[#6E675D] max-w-md mx-auto mb-6">
-          Suas preferências foram registradas com segurança para o <strong>Aulão e Baile</strong>. Quando houver afinidade real com outro participante, você será avisado!
-        </p>
-
-        {/* ======================================================== */}
-        {/* CASE A: MATCH FOUND IMMEDIATELY                          */}
-        {/* ======================================================== */}
-        {topMatch && partnerUser ? (
-          <div className="text-left space-y-5 pt-4 border-t border-[#F0EAE0]">
-            
-            {/* Match Banner */}
-            <div className="p-4 rounded-2xl bg-gradient-to-tr from-red-50 via-[#FAF7F2] to-amber-50 border border-[#E7E0D3]">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-[#D92B27]">
-                  <Sparkles className="w-4 h-4" />
-                  <span>Encontramos um Par Compatível para Você!</span>
-                </div>
-                <span className="text-xs font-mono font-bold bg-[#D92B27] text-white px-2.5 py-0.5 rounded-full">
-                  {topMatch.score}% Afinidade
-                </span>
-              </div>
-
-              <p className="text-xs text-[#4A453F] leading-relaxed">
-                Um membro da <strong className="text-[#242220]">{partnerUser.ward} ({partnerUser.stake})</strong> preencheu os mesmos gostos e critérios indispensáveis que você para o baile!
-              </p>
-            </div>
-
-            {/* Step 1 of Match: WhatsApp notification preview */}
-            <div className="bg-[#FAF7F2] p-4 rounded-2xl border border-[#E7E0D3]">
-              <div className="text-xs font-bold text-[#242220] mb-1 flex items-center gap-1.5">
-                <MessageCircle className="w-4 h-4 text-emerald-600" />
-                <span>Notificação Pronta para WhatsApp</span>
-              </div>
-              <p className="text-[11px] text-[#6E675D] mb-3">
-                Você pode testar e abrir o link que enviamos para o seu número:
-              </p>
-
-              <a
-                href={whatsappLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all"
-              >
-                <Phone className="w-3.5 h-3.5 fill-current" />
-                <span>Abrir Mensagem de Match no WhatsApp</span>
-                <ExternalLink className="w-3.5 h-3.5 ml-1" />
-              </a>
-            </div>
-
-            {/* Step 2 of Match: Mutual Consent flow */}
-            {!bothAccepted ? (
-              <div className="p-5 rounded-2xl border-2 border-dashed border-[#D92B27]/40 bg-white text-center space-y-3">
-                <div className="w-10 h-10 rounded-full bg-red-50 text-[#D92B27] flex items-center justify-center mx-auto">
-                  <Heart className="w-5 h-5 fill-current" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-[#242220]">
-                    Quer saber mais sobre esse match para o baile?
-                  </h4>
-                  <p className="text-xs text-[#6E675D] mt-1 max-w-sm mx-auto">
-                    "Aceita compartilhar suas informações para se conhecerem no Aulão e Baile?"
-                  </p>
-                </div>
-
-                {!myAccepted ? (
-                  <button
-                    onClick={handleAcceptMyShare}
-                    className="w-full sm:w-auto px-6 py-2.5 bg-[#D92B27] hover:bg-[#C02420] text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
-                  >
-                    Sim, Aceito Compartilhar!
-                  </button>
-                ) : (
-                  <div className="text-xs text-[#D92B27] font-semibold flex items-center justify-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#D92B27] animate-ping" />
-                    <span>Você aceitou! Aguardando confirmação mútua...</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Step 3 of Match: MUTUAL MATCH REVEALED! */
-              <div className="p-6 rounded-2xl bg-[#FFFDF9] border border-[#D92B27] space-y-4 animate-in fade-in duration-300 shadow-sm">
-                <div className="text-center">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#D92B27] text-white rounded-full text-xs font-bold mb-2 shadow-sm">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Match Mútuo Confirmado! 🎉</span>
-                  </div>
-                  <h3 className="text-base font-bold text-[#242220]">
-                    Vocês dois aceitaram se conhecer no Baile!
-                  </h3>
-                  <p className="text-xs text-[#6E675D]">
-                    Aqui estão as informações do perfil do seu par:
-                  </p>
-                </div>
-
-                {/* Secure Revealed Profile Card */}
-                <div className="bg-[#FAF7F2] rounded-2xl p-4 border border-[#E7E0D3] shadow-sm flex items-start gap-4">
-                  {partnerUser.photoUrl ? (
-                    <img
-                      src={partnerUser.photoUrl}
-                      alt={partnerUser.name}
-                      className="w-20 h-20 rounded-2xl object-cover shrink-0 ring-2 ring-[#D92B27]"
-                    />
-                  ) : (
-                    <div className="w-20 h-20 rounded-2xl bg-[#EBE5D8] text-[#D92B27] flex items-center justify-center font-bold text-2xl font-display">
-                      {partnerUser.name.charAt(0)}
-                    </div>
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-base font-bold text-[#242220] truncate">
-                        {partnerUser.name}, {partnerUser.age} anos
-                      </h4>
-                      <span className="text-[10px] uppercase font-bold text-[#0B4A72] bg-[#0B4A72]/10 px-2 py-0.5 rounded-full">
-                        {partnerUser.gender}
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-[#6E675D] mt-0.5">
-                      {partnerUser.ward} · {partnerUser.stake}
-                    </div>
-
-                    {/* Informação sobre Missão */}
-                    <div className="text-xs text-[#3B3731] mt-1.5 flex items-center gap-1">
-                      <span className="font-semibold text-[#D92B27]">Missão:</span>
-                      <span>
-                        {partnerUser.mission.served && partnerUser.mission.location
-                          ? `Serviu em ${partnerUser.mission.location}`
-                          : partnerUser.mission.served
-                          ? 'Serviu missão de tempo integral'
-                          : 'Não serviu missão'}
-                      </span>
-                    </div>
-
-                    {/* Personalidade */}
-                    <div className="text-xs text-[#6E675D] mt-1">
-                      <span className="font-semibold">Personalidade: </span>
-                      <span className="capitalize">{partnerUser.personality}</span>
-                    </div>
-
-                    {partnerUser.instagram && (
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#0B4A72] mt-2">
-                        <Instagram className="w-3.5 h-3.5" />
-                        <span>{partnerUser.instagram}</span>
-                      </div>
-                    )}
-
-                    {partnerUser.aboutMePhrase && (
-                      <p className="text-xs italic text-[#6E675D] mt-2 border-t border-[#E7E0D3] pt-1.5">
-                        "{partnerUser.aboutMePhrase}"
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Direct Action Link to chat */}
-                <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
-                  <a
-                    href={`https://wa.me/55${partnerUser.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(
-                      `Olá, ${partnerUser.name}! Nos conectamos pelo Encontro Marcado (Aulão e Baile Caxingui + SP Norte)! Adorei ver nossa afinidade. Você vai no baile dia 14 de Novembro no Instituto?`
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors"
-                  >
-                    <Phone className="w-3.5 h-3.5 fill-current" />
-                    <span>Chamar no WhatsApp</span>
-                  </a>
-
-                  {partnerUser.instagram && (
-                    <a
-                      href={`https://instagram.com/${partnerUser.instagram.replace('@', '')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-2.5 bg-[#0B4A72] hover:bg-[#083857] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors"
-                    >
-                      <Instagram className="w-3.5 h-3.5" />
-                      <span>Ver Instagram</span>
-                    </a>
-                  )}
-                </div>
-              </div>
-            )}
-
-          </div>
-        ) : (
-          /* ======================================================== */
-          /* CASE B: NO IMMEDIATE MATCH YET                          */
-          /* ======================================================== */
-          <div className="space-y-4 pt-4 border-t border-[#F0EAE0] text-left">
-            <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E7E0D3]">
-              <h3 className="text-xs font-bold text-[#242220] mb-1 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-[#0B4A72]" />
-                <span>O que acontece agora?</span>
-              </h3>
-              <p className="text-xs text-[#6E675D] leading-relaxed">
-                Mais jovens das estacas Caxingui e SP Norte estão se cadastrando para o baile. Assim que houver um match recíproco entre homem e mulher atendendo aos seus critérios indispensáveis, enviaremos o link no seu WhatsApp:
-              </p>
-              <div className="mt-2 text-xs font-mono font-semibold text-[#D92B27]">
-                {currentUser.whatsapp}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Back to Home Button */}
-        <div className="mt-8 pt-4 border-t border-[#F0EAE0] flex items-center justify-center">
-          <button
-            onClick={onBackToHome}
-            className="flex items-center gap-2 text-xs font-semibold text-[#6E675D] hover:text-[#242220] transition-colors cursor-pointer"
-          >
-            <Home className="w-4 h-4" />
-            <span>Voltar à Tela Inicial</span>
-          </button>
-        </div>
-
+      <div className="mt-5 rounded-2xl bg-[#FAF7F2] border border-[#E7E0D3] p-4 text-sm space-y-2">
+        <p className="flex gap-2 font-semibold"><Lock className="w-4 h-4 shrink-0 mt-0.5" />Seus contatos só aparecem após o aceite dos dois.</p>
+        <p>Volte neste mesmo navegador para acessar seu perfil. Seu acesso fica salvo aqui por até 30 dias; evite modo anônimo e não limpe os dados do navegador.</p>
+        <p className="text-xs text-[#6E675D]">Não há envio automático de mensagens nem agendamento de encontros.</p>
       </div>
-    </div>
-  );
-};
+      {!sessionSaved && <p role="alert" className="mt-4 rounded-xl p-3 bg-amber-50 text-amber-950 text-sm">Seu perfil está no sistema, mas este navegador não permitiu salvar o acesso. Mantenha esta página aberta para acompanhar seus matches.</p>}
+      {error && <p role="alert" className="mt-4 rounded-xl p-3 bg-red-50 text-red-800 text-sm">{error}</p>}
+
+      <section className="mt-6" aria-labelledby="matches-title">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 id="matches-title" className="font-bold text-base flex items-center gap-2"><Heart className="w-5 h-5 text-[#D92B27]" />Meus matches</h2>
+          <button onClick={onRefresh} disabled={refreshing} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-[#DCD5C6] text-sm font-semibold disabled:opacity-50"><RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />Atualizar</button>
+        </div>
+        <p className="text-xs text-[#6E675D] mb-4">Somente compatibilidades acima de 70%. Os resultados se atualizam a cada 30 segundos enquanto esta página estiver aberta.</p>
+        {matches.length === 0 ? <p role="status" className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E7E0D3] text-sm">{refreshing ? 'Buscando compatibilidades…' : 'Ainda não há matches acima de 70% para seu perfil. Volte quando mais participantes tiverem se cadastrado.'}</p> :
+          <ul className="space-y-4">
+            {matches.filter(match => match.score > 70).map(match => (
+              <li key={match.id} className="p-4 rounded-2xl border border-[#E7E0D3] space-y-3">
+                <div className="flex items-start gap-3 justify-between">
+                  <div className="min-w-0">
+                    <h3 className="font-bold break-words">{match.mutual ? match.partner.name : 'Uma pessoa compatível'}{`, ${match.partner.age} anos`}</h3>
+                    {match.mutual && <p className="text-sm text-[#6E675D] break-words">{match.partner.ward} · {match.partner.stake}</p>}
+                  </div>
+                  <span className="shrink-0 rounded-full px-3 py-1 bg-[#D92B27] text-white text-sm font-bold">{match.score}%</span>
+                </div>
+                {match.commonInterests.length > 0 && <p className="text-sm break-words"><strong>Em comum:</strong> {match.commonInterests.join(', ')}</p>}
+                <p className="text-sm text-[#6E675D]">{match.personalityMatch}</p>
+                {match.mutual ? <>
+                  <p className="font-semibold text-emerald-800 text-sm" role="status">Vocês dois aceitaram compartilhar o perfil!</p>
+                  {match.partner.photoUrl && <img src={match.partner.photoUrl} alt={`Foto de ${match.partner.name}`} className="w-24 h-24 object-cover rounded-2xl" />}
+                  {match.partner.aboutMePhrase && <p className="text-sm break-words">{match.partner.aboutMePhrase}</p>}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    {match.partner.whatsapp && <a href={`https://wa.me/55${match.partner.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-emerald-700 text-white font-semibold text-sm"><Phone className="w-4 h-4" />Conversar no WhatsApp</a>}
+                    {match.partner.instagram && <a href={`https://www.instagram.com/${encodeURIComponent(match.partner.instagram.replace(/^@/, ''))}/`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#0B4A72] text-white font-semibold text-sm"><Instagram className="w-4 h-4" />Ver Instagram</a>}
+                  </div>
+                </> : match.accepted ? <p role="status" className="p-3 bg-amber-50 text-amber-950 rounded-xl text-sm">Você aceitou. Aguardando o aceite da outra pessoa para liberar os perfis e contatos.</p> : <>
+                  <p className="text-sm">Ao aceitar, você permite que esta pessoa veja seu nome, foto e contatos se ela também aceitar.</p>
+                  <button onClick={() => onAccept(match.id)} disabled={pendingMatch !== null} className="w-full px-4 py-3 bg-[#D92B27] hover:bg-[#C02420] text-white font-bold rounded-xl disabled:opacity-50">{pendingMatch === match.id ? 'Registrando aceite…' : 'Aceitar Compartilhar Meu Perfil'}</button>
+                </>}
+              </li>
+            ))}
+          </ul>}
+      </section>
+      <button onClick={onBackToHome} className="mt-6 mx-auto flex items-center gap-2 text-sm font-semibold text-[#0B4A72] px-3 py-2"><Home className="w-4 h-4" />Voltar à tela inicial</button>
+    </main>
+  </div>
+);

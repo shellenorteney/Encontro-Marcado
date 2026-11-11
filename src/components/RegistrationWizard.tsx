@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -10,8 +10,7 @@ import {
   Sparkles,
   User,
   Compass,
-  Briefcase,
-  Trash2
+  Briefcase
 } from 'lucide-react';
 import { UserProfile, Gender, PersonalityType } from '../types/profile';
 import { STANDARD_INTERESTS, SITUATIONAL_QUESTIONS } from '../data/seedData';
@@ -19,14 +18,20 @@ import { STANDARD_INTERESTS, SITUATIONAL_QUESTIONS } from '../data/seedData';
 interface RegistrationWizardProps {
   onCancel: () => void;
   onComplete: (profile: UserProfile) => void;
+  submitting?: boolean;
+  serverError?: string | null;
 }
 
 export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
   onCancel,
   onComplete,
+  submitting = false,
+  serverError = null,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const stepTitleRef = useRef<HTMLHeadingElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -58,19 +63,55 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
   });
 
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [photoProcessing, setPhotoProcessing] = useState(false);
+
+  useEffect(() => {
+    stepTitleRef.current?.focus();
+  }, [step]);
+
+  useEffect(() => {
+    if (validationError || serverError) errorRef.current?.focus();
+  }, [validationError, serverError]);
 
   // Handle Photo Upload (Gallery / Camera)
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
+      setValidationError(null);
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
+        setValidationError('Escolha uma imagem JPG, PNG ou WebP de até 10 MB, ou continue sem foto.');
+        e.target.value = '';
+        return;
+      }
+      setPhotoProcessing(true);
+      try {
+        const image = await createImageBitmap(file);
+        const scale = Math.min(1, 640 / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext('2d');
+        if (!context) {
+          image.close();
+          throw new Error('Não foi possível processar a imagem.');
+        }
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        image.close();
+        let photoUrl = canvas.toDataURL('image/jpeg', 0.8);
+        if (photoUrl.length > 500 * 1024) photoUrl = canvas.toDataURL('image/jpeg', 0.6);
+        if (photoUrl.length > 500 * 1024) throw new Error('A imagem reduzida ainda é muito grande.');
         setFormData((prev) => ({
           ...prev,
-          photoUrl: reader.result as string,
+          photoUrl,
         }));
-      };
-      reader.readAsDataURL(file);
+      } catch {
+        setValidationError('Não foi possível processar a foto. Tente outra imagem ou continue sem foto.');
+      } finally {
+        setPhotoProcessing(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -111,22 +152,26 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
 
   const handleNext = () => {
     setValidationError(null);
+    if (photoProcessing) {
+      setValidationError('Aguarde um instante enquanto a foto é reduzida.');
+      return;
+    }
 
     if (step === 1) {
       if (!formData.name.trim()) {
         setValidationError('Por favor, informe seu nome.');
         return;
       }
-      if (!formData.age || formData.age < 18) {
-        setValidationError('Por favor, informe uma idade válida (a partir de 18 anos).');
+      if (!Number.isInteger(formData.age) || formData.age < 18 || formData.age > 99) {
+        setValidationError('Por favor, informe uma idade inteira entre 18 e 99 anos.');
         return;
       }
       if (!formData.ward.trim() || !formData.stake.trim()) {
         setValidationError('Por favor, preencha sua Ala e Estaca para que seu par saiba de onde você é.');
         return;
       }
-      if (!formData.whatsapp.trim() || formData.whatsapp.replace(/\D/g, '').length < 10) {
-        setValidationError('Por favor, informe seu número de WhatsApp com DDD para avisarmos sobre os matches.');
+      if (!/^\d{10,11}$/.test(formData.whatsapp.replace(/\D/g, ''))) {
+        setValidationError('Informe seu WhatsApp com DDD e 10 ou 11 dígitos.');
         return;
       }
       setStep(2);
@@ -141,6 +186,10 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
       }
       setStep(3);
     } else if (step === 3) {
+      if (![formData.minAge, formData.maxAge].every((age) => Number.isInteger(age) && age >= 18 && age <= 99)) {
+        setValidationError('Informe idades inteiras entre 18 e 99 anos na faixa etária desejada.');
+        return;
+      }
       if (formData.minAge > formData.maxAge) {
         setValidationError('A idade mínima não pode ser maior que a idade máxima.');
         return;
@@ -151,8 +200,9 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting || photoProcessing) return;
     if (!formData.consentGiven) {
-      setValidationError('Você precisa aceitar os termos de consentimento para prosseguir.');
+      setValidationError('Confirme seu consentimento para participar.');
       return;
     }
 
@@ -194,12 +244,12 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-paper py-8 px-4 flex flex-col justify-center items-center">
-      <div className="w-full max-w-xl bg-[#FFFDF9] rounded-3xl p-6 sm:p-8 border border-[#E7E0D3] shadow-xl shadow-[#0B4A72]/5 transition-all">
-        
+    <div className="min-h-screen bg-paper py-4 sm:py-8 px-3 sm:px-4 flex flex-col justify-center items-center [&_button]:min-h-11 [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-[#0B4A72]">
+      <div className="w-full min-w-0 max-w-xl bg-[#FFFDF9] rounded-3xl p-4 sm:p-8 border border-[#E7E0D3] shadow-xl shadow-[#0B4A72]/5 transition-all">
+
         {/* Event Header Banner */}
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#F0EAE0]">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-[#F0EAE0]">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[11px] font-black uppercase tracking-wider text-[#0B4A72] bg-[#0B4A72]/10 px-2.5 py-0.5 rounded-full">
               Caxingui + SP Norte
             </span>
@@ -208,13 +258,13 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
             </span>
           </div>
 
-          <span className="text-xs font-mono font-bold text-[#D92B27]">
+          <span className="text-xs font-mono font-bold text-[#D92B27] whitespace-nowrap" aria-live="polite">
             Passo {step} de 4
           </span>
         </div>
 
         {/* Navigation & Progress Header */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <button
             type="button"
             onClick={() => {
@@ -224,7 +274,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                 onCancel();
               }
             }}
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#6E675D] hover:text-[#242220] transition-colors cursor-pointer"
+            className="px-2 -ml-2 flex items-center gap-1.5 text-sm font-semibold text-[#6E675D] hover:text-[#242220] transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>{step === 1 ? 'Cancelar' : 'Voltar'}</span>
@@ -239,7 +289,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full bg-[#EAE4D7] h-2 rounded-full overflow-hidden mb-6">
+        <div role="progressbar" aria-label="Progresso do perfil" aria-valuemin={1} aria-valuemax={4} aria-valuenow={step} className="w-full bg-[#EAE4D7] h-2 rounded-full overflow-hidden mb-6">
           <div
             className="bg-[#D92B27] h-full rounded-full transition-all duration-300"
             style={{ width: `${(step / 4) * 100}%` }}
@@ -247,9 +297,12 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
         </div>
 
         {/* Validation Alert */}
-        {validationError && (
-          <div className="mb-5 p-3.5 rounded-2xl bg-red-50 text-[#D92B27] text-xs font-semibold border border-red-200 animate-in fade-in">
-            {validationError}
+        <div role="note" className="mb-5 p-3.5 rounded-2xl bg-amber-50 text-amber-950 text-xs border border-amber-200">
+          <strong>Seus dados são usados para a atividade Encontro Marcado.</strong> A organização tem acesso ao cadastro. Antes do aceite mútuo, o par vê apenas um resumo de compatibilidade, idade e interesses em comum. Nome, foto e contatos aparecem somente depois do aceite dos dois. Não há envio automático de mensagens.
+        </div>
+        {(validationError || serverError) && (
+          <div ref={errorRef} role="alert" tabIndex={-1} className="mb-5 p-3.5 rounded-2xl bg-red-50 text-[#D92B27] text-xs font-semibold border border-red-200 animate-in fade-in">
+            {validationError || serverError}
           </div>
         )}
 
@@ -259,32 +312,32 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
         {step === 1 && (
           <div className="space-y-5 animate-in fade-in duration-150">
             <div>
-              <h2 className="text-2xl font-bold text-[#242220] tracking-tight">
+              <h1 ref={stepTitleRef} tabIndex={-1} className="text-2xl font-bold text-[#242220] tracking-tight">
                 Criando Seu Perfil
-              </h2>
+              </h1>
               <p className="text-xs text-[#6E675D] mt-1">
-                Informações para que seu par do baile saiba quem você é.
+                Preencha seu perfil para participar da atividade de compatibilidade no baile.
               </p>
             </div>
 
             {/* Photo Upload: Gallery or Camera (OPTIONAL) */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold text-[#3B3731]">
+              <div className="flex flex-wrap items-center justify-between gap-1 mb-2">
+                <label htmlFor="profile-photo" className="text-xs font-bold text-[#3B3731]">
                   Foto do Perfil (Opcional)
                 </label>
                 <span className="text-[11px] text-[#7A7369]">Não é obrigatório</span>
               </div>
 
-              <input
+              <input id="profile-photo"
                 type="file"
                 ref={fileInputRef}
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp" aria-describedby="photo-help"
                 onChange={handlePhotoUpload}
                 className="hidden"
               />
 
-              <div className="flex items-center gap-4 p-4 rounded-2xl bg-[#FAF7F2] border border-[#E7E0D3]">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 sm:p-4 rounded-2xl bg-[#FAF7F2] border border-[#E7E0D3]">
                 {formData.photoUrl ? (
                   <div className="relative w-16 h-16 rounded-2xl overflow-hidden ring-2 ring-[#D92B27] shrink-0">
                     <img
@@ -292,14 +345,6 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                       alt="Sua foto"
                       className="w-full h-full object-cover"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, photoUrl: undefined })}
-                      className="absolute top-1 right-1 w-5 h-5 bg-[#D92B27] text-white rounded-full flex items-center justify-center text-xs hover:bg-[#C02420] shadow-sm cursor-pointer"
-                      title="Remover foto"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
                   </div>
                 ) : (
                   <div className="w-16 h-16 rounded-2xl bg-[#EBE5D8] text-[#8C8477] flex items-center justify-center shrink-0">
@@ -307,29 +352,30 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                   </div>
                 )}
 
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0 w-full space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
+                      disabled={photoProcessing}
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3.5 py-2 bg-white border border-[#DCD5C6] hover:border-[#0B4A72] rounded-xl text-xs font-semibold text-[#242220] flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                      className="max-w-full px-3.5 py-2 bg-white border border-[#DCD5C6] hover:border-[#0B4A72] rounded-xl text-xs font-semibold text-[#242220] flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                     >
-                      <Camera className="w-3.5 h-3.5 text-[#D92B27]" />
-                      <span>{formData.photoUrl ? 'Trocar Foto' : 'Adicionar da Galeria ou Câmera'}</span>
+                      <Camera className="w-4 h-4 shrink-0 text-[#D92B27]" />
+                      <span>{photoProcessing ? 'Preparando foto…' : formData.photoUrl ? 'Trocar Foto' : 'Adicionar da Galeria ou Câmera'}</span>
                     </button>
 
                     {formData.photoUrl && (
                       <button
                         type="button"
-                        onClick={() => setFormData({ ...formData, photoUrl: undefined })}
-                        className="text-xs text-[#7A7369] hover:text-[#D92B27] cursor-pointer"
+                        onClick={() => { setFormData({ ...formData, photoUrl: undefined }); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                        className="px-2 text-sm text-[#7A7369] hover:text-[#D92B27] cursor-pointer"
                       >
                         Deixar sem foto
                       </button>
                     )}
                   </div>
-                  <p className="text-[11px] text-[#7A7369]">
-                    Você pode escolher uma foto da galeria, tirar agora ou deixar sem foto.
+                  <p id="photo-help" className="text-xs text-[#7A7369]">
+                    Foto opcional em JPG, PNG ou WebP. Imagens de até 10 MB são reduzidas antes de salvar.
                   </p>
                 </div>
               </div>
@@ -343,7 +389,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, gender: 'mulher' })}
+                  onClick={() => setFormData({ ...formData, gender: 'mulher' })} aria-pressed={formData.gender === 'mulher'}
                   className={`py-3 px-4 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 cursor-pointer ${
                     formData.gender === 'mulher'
                       ? 'bg-[#D92B27] text-white border-[#D92B27] shadow-md shadow-[#D92B27]/20'
@@ -356,7 +402,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, gender: 'homem' })}
+                  onClick={() => setFormData({ ...formData, gender: 'homem' })} aria-pressed={formData.gender === 'homem'}
                   className={`py-3 px-4 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-2 cursor-pointer ${
                     formData.gender === 'homem'
                       ? 'bg-[#D92B27] text-white border-[#D92B27] shadow-md shadow-[#D92B27]/20'
@@ -373,33 +419,33 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
             </div>
 
             {/* Nome & Idade */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2">
-                <label className="block text-xs font-bold text-[#3B3731] mb-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2 min-w-0">
+                <label htmlFor="profile-name" className="block text-xs font-bold text-[#3B3731] mb-1">
                   Seu Nome <span className="text-[#D92B27]">*</span>
                 </label>
-                <input
+                <input id="profile-name" maxLength={80} autoComplete="off"
                   type="text"
                   required
                   placeholder="Ex: Ana Clara"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-xs text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
+                  className="w-full min-w-0 min-h-11 px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#3B3731] mb-1">
+                <label htmlFor="profile-age" className="block text-xs font-bold text-[#3B3731] mb-1">
                   Idade <span className="text-[#D92B27]">*</span>
                 </label>
-                <input
+                <input id="profile-age" inputMode="numeric" step={1}
                   type="number"
                   min={18}
                   max={99}
                   required
                   value={formData.age}
                   onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-xs text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
+                  className="w-full min-w-0 min-h-11 px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
                 />
               </div>
             </div>
@@ -407,30 +453,30 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
             {/* Ala e Estaca */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-[#3B3731] mb-1">
+                <label htmlFor="profile-ward" className="block text-xs font-bold text-[#3B3731] mb-1">
                   Sua Ala <span className="text-[#D92B27]">*</span>
                 </label>
-                <input
+                <input id="profile-ward" maxLength={100}
                   type="text"
                   required
                   placeholder="Ex: Ala Perdizes"
                   value={formData.ward}
                   onChange={(e) => setFormData({ ...formData, ward: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-xs text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
+                  className="w-full min-w-0 min-h-11 px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#3B3731] mb-1">
+                <label htmlFor="profile-stake" className="block text-xs font-bold text-[#3B3731] mb-1">
                   Sua Estaca <span className="text-[#D92B27]">*</span>
                 </label>
-                <input
+                <input id="profile-stake" maxLength={100}
                   type="text"
                   required
                   placeholder="Ex: Estaca Caxingui"
                   value={formData.stake}
                   onChange={(e) => setFormData({ ...formData, stake: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-xs text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
+                  className="w-full min-w-0 min-h-11 px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
                 />
               </div>
             </div>
@@ -438,52 +484,52 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
             {/* WhatsApp & Instagram */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-[#3B3731] mb-1 flex items-center gap-1.5">
+                <label htmlFor="profile-whatsapp" className="block text-xs font-bold text-[#3B3731] mb-1 flex items-center gap-1.5">
                   <Phone className="w-3.5 h-3.5 text-emerald-600" />
                   <span>WhatsApp com DDD <span className="text-[#D92B27]">*</span></span>
                 </label>
-                <input
+                <input id="profile-whatsapp" inputMode="tel" autoComplete="off" maxLength={20} aria-describedby="whatsapp-help"
                   type="tel"
                   required
                   placeholder="Ex: 11987654321"
                   value={formData.whatsapp}
                   onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-xs text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
+                  className="w-full min-w-0 min-h-11 px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
                 />
-                <span className="text-[10px] text-[#7A7369] mt-0.5 block">
-                  Para envio do link de match do baile.
+                <span id="whatsapp-help" className="text-xs text-[#7A7369] mt-0.5 block">
+                  Visível para o par somente após o aceite mútuo. Não enviaremos mensagens automaticamente.
                 </span>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#3B3731] mb-1 flex items-center gap-1.5">
+                <label htmlFor="profile-instagram" className="block text-xs font-bold text-[#3B3731] mb-1 flex items-center gap-1.5">
                   <Instagram className="w-3.5 h-3.5 text-[#0B4A72]" />
                   <span>@ do Instagram (opcional)</span>
                 </label>
-                <input
+                <input id="profile-instagram" maxLength={31} autoCapitalize="none" autoComplete="off" aria-describedby="instagram-help"
                   type="text"
                   placeholder="Ex: @seu_usuario"
                   value={formData.instagram}
                   onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-xs text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
+                  className="w-full min-w-0 min-h-11 px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
                 />
-                <span className="text-[10px] text-[#7A7369] mt-0.5 block">
-                  Só revelado se ambos aceitarem o match!
+                <span id="instagram-help" className="text-xs text-[#7A7369] mt-0.5 block">
+                  Opcional. Visível para o par somente depois do aceite mútuo.
                 </span>
               </div>
             </div>
 
             {/* Frase Sobre Mim */}
             <div>
-              <label className="block text-xs font-bold text-[#3B3731] mb-1">
+              <label htmlFor="profile-about" className="block text-xs font-bold text-[#3B3731] mb-1">
                 Uma Frase Sobre Mim (opcional)
               </label>
-              <textarea
+              <textarea id="profile-about" maxLength={300}
                 rows={2}
                 placeholder="Ex: Animada para o baile, gosto de conversar e dar boas risadas!"
                 value={formData.aboutMePhrase}
                 onChange={(e) => setFormData({ ...formData, aboutMePhrase: e.target.value })}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-xs text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
+                className="w-full min-w-0 min-h-11 px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
               />
             </div>
           </div>
@@ -495,9 +541,9 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
         {step === 2 && (
           <div className="space-y-6 animate-in fade-in duration-150">
             <div>
-              <h2 className="text-2xl font-bold text-[#242220] tracking-tight">
+              <h1 ref={stepTitleRef} tabIndex={-1} className="text-2xl font-bold text-[#242220] tracking-tight">
                 Sobre Mim: Gostos, Missão & Estilo
-              </h2>
+              </h1>
               <p className="text-xs text-[#6E675D] mt-1">
                 Conte sobre seus gostos, sua missão e estilo para o baile.
               </p>
@@ -515,14 +561,14 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                     <button
                       key={item}
                       type="button"
-                      onClick={() => handleToggleInterest(item)}
+                      onClick={() => handleToggleInterest(item)} aria-pressed={isSelected}
                       className={`p-3 rounded-xl text-xs font-semibold transition-all border text-left flex items-center justify-between cursor-pointer ${
                         isSelected
                           ? 'bg-[#D92B27] text-white border-[#D92B27] shadow-sm'
                           : 'bg-[#FAF7F2] text-[#3B3731] border-[#E7E0D3] hover:border-[#0B4A72]'
                       }`}
                     >
-                      <span className="truncate">{item}</span>
+                      <span className="min-w-0 break-words">{item}</span>
                       {isSelected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
                     </button>
                   );
@@ -540,7 +586,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, servedMission: true })}
+                  onClick={() => setFormData({ ...formData, servedMission: true })} aria-pressed={formData.servedMission}
                   className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                     formData.servedMission
                       ? 'bg-[#D92B27] text-white border-[#D92B27] shadow-sm'
@@ -551,7 +597,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, servedMission: false, missionLocation: '' })}
+                  onClick={() => setFormData({ ...formData, servedMission: false, missionLocation: '' })} aria-pressed={!formData.servedMission}
                   className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                     !formData.servedMission
                       ? 'bg-[#D92B27] text-white border-[#D92B27] shadow-sm'
@@ -564,19 +610,19 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
 
               {formData.servedMission && (
                 <div className="animate-in fade-in">
-                  <label className="block text-xs font-bold text-[#3B3731] mb-1">
+                  <label htmlFor="profile-mission" className="block text-xs font-bold text-[#3B3731] mb-1">
                     Onde você serviu?
                   </label>
-                  <input
+                  <input id="profile-mission" maxLength={100} aria-describedby="mission-help"
                     type="text"
                     required
                     placeholder="Ex: Brasil Curitiba Sul, Portugal Lisboa..."
                     value={formData.missionLocation}
                     onChange={(e) => setFormData({ ...formData, missionLocation: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-xs text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
+                    className="w-full min-w-0 min-h-11 px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
                   />
-                  <span className="text-[10px] text-[#7A7369] mt-0.5 block">
-                    Essa informação aparecerá para seu par quando o match for enviado.
+                  <span id="mission-help" className="text-xs text-[#7A7369] mt-0.5 block">
+                    Informação usada no cálculo de compatibilidade.
                   </span>
                 </div>
               )}
@@ -587,7 +633,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
               <label className="block text-xs font-bold text-[#242220]">
                 Como você se descreve em termos de energia social?
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="group" aria-label="Energia social">
                 {[
                   { key: 'introvertido', label: 'Introvertido(a)', desc: 'Recarrega no silêncio / poucos amigos' },
                   { key: 'ambivertido', label: 'Ambivertido(a)', desc: 'Equilíbrio flexível' },
@@ -596,7 +642,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                   <button
                     key={item.key}
                     type="button"
-                    onClick={() => setFormData({ ...formData, personality: item.key as PersonalityType })}
+                    onClick={() => setFormData({ ...formData, personality: item.key as PersonalityType })} aria-pressed={formData.personality === item.key}
                     className={`p-2.5 rounded-xl text-center border transition-all cursor-pointer ${
                       formData.personality === item.key
                         ? 'bg-[#0B4A72] text-white border-[#0B4A72] shadow-sm'
@@ -637,6 +683,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                           <button
                             key={opt.id}
                             type="button"
+                            aria-pressed={isChosen}
                             onClick={() =>
                               setFormData({
                                 ...formData,
@@ -662,16 +709,16 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
 
             {/* O que trabalha ou estuda */}
             <div>
-              <label className="block text-xs font-bold text-[#3B3731] mb-1 flex items-center gap-1.5">
+              <label htmlFor="profile-occupation" className="block text-xs font-bold text-[#3B3731] mb-1 flex items-center gap-1.5">
                 <Briefcase className="w-3.5 h-3.5 text-[#0B4A72]" />
                 <span>O que você trabalha ou estuda? (opcional)</span>
               </label>
-              <input
+              <input id="profile-occupation" maxLength={100}
                 type="text"
                 placeholder="Ex: Trabalho com tecnologia / Estudo Arquitetura"
                 value={formData.occupation}
                 onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-xs text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
+                className="w-full min-w-0 min-h-11 px-3.5 py-2.5 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm text-[#242220] focus:outline-none focus:ring-2 focus:ring-[#D92B27]"
               />
             </div>
           </div>
@@ -683,9 +730,9 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
         {step === 3 && (
           <div className="space-y-6 animate-in fade-in duration-150">
             <div>
-              <h2 className="text-2xl font-bold text-[#242220] tracking-tight">
+              <h1 ref={stepTitleRef} tabIndex={-1} className="text-2xl font-bold text-[#242220] tracking-tight">
                 O Que Você Procura em Alguém?
-              </h2>
+              </h1>
               <p className="text-xs text-[#6E675D] mt-1">
                 Defina a faixa etária e o que você considera indispensável ou legal ter.
               </p>
@@ -698,25 +745,25 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
               </label>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="text-[11px] text-[#6E675D] block mb-1">Idade Mínima</span>
-                  <input
+                  <label htmlFor="profile-min-age" className="text-[11px] text-[#6E675D] block mb-1">Idade Mínima</label>
+                  <input id="profile-min-age" inputMode="numeric" step={1}
                     type="number"
                     min={18}
-                    max={formData.maxAge}
+                    max={99}
                     value={formData.minAge}
                     onChange={(e) => setFormData({ ...formData, minAge: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#DCD5C6] bg-white text-xs font-mono font-bold"
+                    className="w-full min-w-0 min-h-11 px-3 py-2 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm font-mono font-bold"
                   />
                 </div>
                 <div>
-                  <span className="text-[11px] text-[#6E675D] block mb-1">Idade Máxima</span>
-                  <input
+                  <label htmlFor="profile-max-age" className="text-[11px] text-[#6E675D] block mb-1">Idade Máxima</label>
+                  <input id="profile-max-age" inputMode="numeric" step={1}
                     type="number"
-                    min={formData.minAge}
+                    min={18}
                     max={99}
                     value={formData.maxAge}
                     onChange={(e) => setFormData({ ...formData, maxAge: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#DCD5C6] bg-white text-xs font-mono font-bold"
+                    className="w-full min-w-0 min-h-11 px-3 py-2 rounded-xl border border-[#DCD5C6] bg-white text-base sm:text-sm font-mono font-bold"
                   />
                 </div>
               </div>
@@ -730,7 +777,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, missionRequirement: 'any' })}
+                  onClick={() => setFormData({ ...formData, missionRequirement: 'any' })} aria-pressed={formData.missionRequirement === 'any'}
                   className={`py-2.5 px-3 rounded-xl text-xs font-semibold border transition-all text-center cursor-pointer ${
                     formData.missionRequirement === 'any'
                       ? 'bg-[#0B4A72] text-white border-[#0B4A72] shadow-sm'
@@ -741,7 +788,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, missionRequirement: 'must_have_served' })}
+                  onClick={() => setFormData({ ...formData, missionRequirement: 'must_have_served' })} aria-pressed={formData.missionRequirement === 'must_have_served'}
                   className={`py-2.5 px-3 rounded-xl text-xs font-semibold border transition-all text-center cursor-pointer ${
                     formData.missionRequirement === 'must_have_served'
                       ? 'bg-[#0B4A72] text-white border-[#0B4A72] shadow-sm'
@@ -769,14 +816,14 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                     <button
                       key={item}
                       type="button"
-                      onClick={() => handleToggleIndispensable(item)}
+                      onClick={() => handleToggleIndispensable(item)} aria-pressed={isSelected}
                       className={`p-2.5 rounded-xl text-xs font-semibold transition-all border text-left flex items-center justify-between cursor-pointer ${
                         isSelected
                           ? 'bg-[#D92B27] text-white border-[#D92B27] shadow-sm'
                           : 'bg-white text-[#3B3731] border-[#E7E0D3] hover:border-[#D92B27]'
                       }`}
                     >
-                      <span className="truncate">{item}</span>
+                      <span className="min-w-0 break-words">{item}</span>
                       {isSelected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
                     </button>
                   );
@@ -802,7 +849,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                       key={item}
                       type="button"
                       disabled={isIndispensable}
-                      onClick={() => handleToggleNiceToHave(item)}
+                      onClick={() => handleToggleNiceToHave(item)} aria-pressed={isSelected}
                       className={`p-2.5 rounded-xl text-xs font-semibold transition-all border text-left flex items-center justify-between cursor-pointer ${
                         isSelected
                           ? 'bg-[#0B4A72] text-white border-[#0B4A72] shadow-sm'
@@ -811,7 +858,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                           : 'bg-white text-[#3B3731] border-[#E7E0D3] hover:border-[#0B4A72]'
                       }`}
                     >
-                      <span className="truncate">{item}</span>
+                      <span className="min-w-0 break-words">{item}</span>
                       {isSelected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
                     </button>
                   );
@@ -827,11 +874,11 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
         {step === 4 && (
           <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in duration-150">
             <div>
-              <h2 className="text-2xl font-bold text-[#242220] tracking-tight">
-                Termo & Notificação
-              </h2>
+              <h1 ref={stepTitleRef} tabIndex={-1} className="text-2xl font-bold text-[#242220] tracking-tight">
+                Confirmar participação
+              </h1>
               <p className="text-xs text-[#6E675D] mt-1">
-                Quando tiver match compatível com seus gostos, vamos te avisar pelo WhatsApp.
+                Seu cadastro será salvo no sistema da atividade. Volte neste mesmo navegador para acompanhar seus matches. A organização não envia notificações automáticas.
               </p>
             </div>
 
@@ -845,15 +892,17 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                 className="w-4 h-4 rounded text-[#D92B27] accent-[#D92B27] mt-0.5 shrink-0"
               />
               <span className="text-xs text-[#242220] leading-relaxed font-medium">
-                Eu autorizo o uso dos meus dados para o evento <strong className="text-[#D92B27]">Encontro Marcado (Aulão e Baile)</strong> e permito o envio de notificações no meu WhatsApp quando houver match.
+                Tenho 18 anos ou mais e autorizo o armazenamento do meu perfil pela organização do <strong className="text-[#D92B27]">Encontro Marcado</strong> para calcular compatibilidades e exibir idade e interesses em comum a pares compatíveis. Entendo que nome, foto e contatos serão compartilhados com um par apenas quando nós dois aceitarmos.
               </span>
             </label>
 
             <button
               type="submit"
-              className="w-full h-14 bg-[#D92B27] hover:bg-[#C02420] text-white font-bold text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#D92B27]/25 transition-all cursor-pointer"
+              disabled={submitting || photoProcessing}
+              aria-busy={submitting}
+              className="w-full min-h-14 py-3 px-4 bg-[#D92B27] hover:bg-[#C02420] text-white font-bold text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#D92B27]/25 transition-all cursor-pointer"
             >
-              <span>Finalizar Cadastro para o Baile</span>
+              <span>{submitting ? 'Salvando seu perfil…' : 'Concluir Meu Cadastro'}</span>
               <Check className="w-4 h-4 stroke-[3]" />
             </button>
           </form>
@@ -868,7 +917,7 @@ export const RegistrationWizard: React.FC<RegistrationWizardProps> = ({
                 if (step > 1) setStep((s) => (s - 1) as any);
                 else onCancel();
               }}
-              className="text-xs font-semibold text-[#6E675D] hover:text-[#242220] cursor-pointer"
+              className="px-3 text-sm font-semibold text-[#6E675D] hover:text-[#242220] cursor-pointer"
             >
               Voltar
             </button>
