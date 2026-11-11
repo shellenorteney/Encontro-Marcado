@@ -63,6 +63,11 @@ export function calculateMatch(userA: UserProfile, userB: UserProfile): MatchPai
   const situationBonus = situationsSharedCount * 5; // up to 15%
   const score = Math.min(99, 65 + interestBonus + situationBonus);
 
+  // Only compatibility strictly above 70% qualifies as a match.
+  if (score <= 70) {
+    return null;
+  }
+
   // Personality description
   let personalityMatch = 'Personalidades com ótima sintonia';
   if (userA.personality === userB.personality) {
@@ -118,7 +123,7 @@ export function findMatchesForUser(targetUser: UserProfile, allProfiles: UserPro
 export function buildWhatsAppLink(
   recipient: UserProfile,
   candidate: UserProfile,
-  appUrl: string = window.location.origin
+  appUrl: string = new URL('.', window.location.href).href
 ): string {
   let cleanNumber = recipient.whatsapp.replace(/\D/g, '');
   if (cleanNumber.length <= 11) {
@@ -129,7 +134,7 @@ export function buildWhatsAppLink(
     ? `\n🌍 Serviu missão: ${candidate.mission.location}`
     : (candidate.mission?.served ? '\n🌍 Serviu missão de tempo integral' : '');
 
-  const message = `Olá, ${recipient.name}! Encontramos um match para você no Encontro Marcado (Aulão e Baile Caxingui + SP Norte)! 🎉\n\nA pessoa é da ${candidate.ward} (${candidate.stake})${missionText} e tem tudo a ver com seus gostos!\n\nQuer saber mais? Você aceita compartilhar seu perfil e Instagram para combinarem de se conhecer no baile do dia 14 de Novembro no Instituto SP Norte?\n\nAcesse para responder e ver o match mútuo: ${appUrl}`;
+  const message = `Olá, ${recipient.name}! Este é um convite de teste do Encontro Marcado (Aulão e Baile Caxingui + SP Norte).\n\nNo teste local, encontramos compatibilidade com um perfil da ${candidate.ward} (${candidate.stake})${missionText}.\n\nAcesse a versão de teste: ${appUrl}\n\nOs cadastros e matches ficam somente no navegador usado no teste. O link não compartilha perfis nem registra aceite mútuo.`;
 
   return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
 }
