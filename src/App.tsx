@@ -1,200 +1,125 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React, { useState, useEffect } from 'react';
-import { UserProfile, MatchPair } from './types/profile';
-import { INITIAL_SEED_PROFILES } from './data/seedData';
-import { findMatchesForUser, calculateMatch } from './utils/matchEngine';
+/** @license SPDX-License-Identifier: Apache-2.0 */
+import React, { useState, useEffect, useCallback } from 'react';
+import type { UserProfile } from './types/profile';
 import { StartScreen } from './components/StartScreen';
 import { RegistrationWizard } from './components/RegistrationWizard';
 import { SuccessAndMatchView } from './components/SuccessAndMatchView';
-import { AdminDashboard } from './components/AdminDashboard';
-import { AdminLoginModal } from './components/AdminLoginModal';
-
-const STORAGE_KEY = 'conexao_sud_profiles';
-const MATCHES_STORAGE_KEY = 'conexao_sud_matches';
+import { registerProfile, getMyProfile, getMyMatches, acceptMatch, readSession, saveSession, clearSession, ApiError, type SharedMatch } from './services/participants';
 
 export default function App() {
-  const [view, setView] = useState<'start' | 'wizard' | 'success' | 'admin'>('start');
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  
-  // Load profiles from localStorage or seed
-  const [profiles, setProfiles] = useState<UserProfile[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((p: any) => ({
-            ...p,
-            mission: p.mission || { served: true, location: 'Brasil' },
-            personality: p.personality || 'ambivertido',
-            situations: p.situations || {
-              arrivalAtParty: 'ajudar',
-              rainySaturday: 'pizza',
-              surpriseTrip: 'historica',
-            },
-            preferences: {
-              ...p.preferences,
-              missionRequirement: p.preferences?.missionRequirement || 'any',
-            },
-          }));
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load profiles from storage', e);
-    }
-    return INITIAL_SEED_PROFILES;
-  });
-
+  const [view, setView] = useState<'start' | 'wizard' | 'success'>('start');
+  const [token, setToken] = useState<string | null>(readSession);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [userMatches, setUserMatches] = useState<MatchPair[]>([]);
-  const [allMatches, setAllMatches] = useState<MatchPair[]>([]);
+  const [matches, setMatches] = useState<SharedMatch[]>([]);
+  const [loading, setLoading] = useState(Boolean(token));
+  const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [pendingMatch, setPendingMatch] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sessionSaved, setSessionSaved] = useState(true);
 
-  // Recalculate all matches whenever profiles change
-  useEffect(() => {
-    const computedMatches: MatchPair[] = [];
-    const seenPairs = new Set<string>();
-
-    for (let i = 0; i < profiles.length; i++) {
-      for (let j = i + 1; j < profiles.length; j++) {
-        const uA = profiles[i];
-        const uB = profiles[j];
-        const pairKey = [uA.id, uB.id].sort().join('-');
-
-        if (!seenPairs.has(pairKey)) {
-          seenPairs.add(pairKey);
-          const match = calculateMatch(uA, uB);
-          if (match) {
-            computedMatches.push(match);
-          }
-        }
-      }
-    }
-
-    setAllMatches(computedMatches);
-
-    // Save profiles to localStorage
+  const refreshMatches = useCallback(async () => {
+    if (!token) return;
+    setRefreshing(true);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles));
+      const result = await getMyMatches(token);
+      setMatches(result.matches);
+      setError(null);
     } catch (e) {
-      console.error('Failed to save profiles', e);
-    }
-  }, [profiles]);
+      setError(e instanceof Error ? e.message : 'Não foi possível atualizar seus matches.');
+    } finally { setRefreshing(false); }
+  }, [token]);
 
-  const handleStartRegistration = () => {
-    setView('wizard');
+  const restoreProfile = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const result = await getMyProfile(token);
+      setCurrentUser(result.profile);
+      setView('success');
+      setError(null);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        clearSession();
+        setToken(null);
+        setCurrentUser(null);
+        setView('start');
+      }
+      setError(e instanceof Error ? e.message : 'Não foi possível recuperar seu perfil.');
+    } finally { setLoading(false); }
+  }, [token]);
+
+  useEffect(() => { void restoreProfile(); }, [restoreProfile]);
+  useEffect(() => {
+    if (!token || view !== 'success') return;
+    void refreshMatches();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshMatches();
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [token, view, refreshMatches]);
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [view]);
+
+  const handleCompleteRegistration = async (profile: UserProfile) => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await registerProfile(profile);
+      setSessionSaved(saveSession(result.token));
+      setToken(result.token);
+      setCurrentUser(result.profile);
+      setMatches([]);
+      setView('success');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não foi possível salvar o cadastro. Tente novamente.');
+    } finally { setSubmitting(false); }
   };
 
-  const handleOpenAdmin = () => {
-    if (isAdminLoggedIn) {
-      setView('admin');
-    } else {
-      setIsLoginModalOpen(true);
-    }
-  };
-
-  const handleLoginSuccess = () => {
-    setIsAdminLoggedIn(true);
-    setView('admin');
-  };
-
-  const handleLogout = () => {
-    setIsAdminLoggedIn(false);
-    setView('start');
-  };
-
-  const handleCompleteRegistration = (newProfile: UserProfile) => {
-    const updatedProfiles = [newProfile, ...profiles];
-    setProfiles(updatedProfiles);
-    setCurrentUser(newProfile);
-
-    // Calculate matches specifically for this new user
-    const matches = findMatchesForUser(newProfile, updatedProfiles);
-    setUserMatches(matches);
-
-    setView('success');
-  };
-
-  const handleResetSeed = () => {
-    setProfiles(INITIAL_SEED_PROFILES);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(MATCHES_STORAGE_KEY);
-  };
-
-  const handleUpdateMatchAcceptance = (matchId: string, userAAccepted: boolean, userBAccepted: boolean) => {
-    setAllMatches((prev) =>
-      prev.map((m) =>
-        m.id === matchId
-          ? {
-              ...m,
-              userAAccepted,
-              userBAccepted,
-              status: userAAccepted && userBAccepted ? 'mutual_match' : 'accepted_by_one',
-            }
-          : m
-      )
-    );
-
-    setUserMatches((prev) =>
-      prev.map((m) =>
-        m.id === matchId
-          ? {
-              ...m,
-              userAAccepted,
-              userBAccepted,
-              status: userAAccepted && userBAccepted ? 'mutual_match' : 'accepted_by_one',
-            }
-          : m
-      )
-    );
+  const handleAccept = async (matchId: string) => {
+    if (!token || pendingMatch) return;
+    setPendingMatch(matchId);
+    try {
+      const result = await acceptMatch(token, matchId);
+      setMatches(result.matches);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não foi possível registrar seu aceite.');
+    } finally { setPendingMatch(null); }
   };
 
   return (
     <div className="min-h-screen bg-paper text-[#242220] font-sans selection:bg-[#D92B27] selection:text-white antialiased">
-      {view === 'start' && (
-        <StartScreen
-          onStart={handleStartRegistration}
-          onOpenAdmin={handleOpenAdmin}
-        />
-      )}
-
-      {view === 'wizard' && (
-        <RegistrationWizard
-          onCancel={() => setView('start')}
+      {loading ? (
+        <main className="min-h-screen flex items-center justify-center p-6" role="status">Carregando seu perfil…</main>
+      ) : <>
+        {view === 'start' && <>
+          {error && <div role="alert" className="max-w-md mx-auto p-4 text-red-800">{error}</div>}
+          <StartScreen hasProfile={Boolean(token)} onStart={() => {
+            setError(null);
+            if (currentUser) setView('success');
+            else if (token) void restoreProfile();
+            else setView('wizard');
+          }} />
+        </>}
+        {view === 'wizard' && <RegistrationWizard
+          onCancel={() => { setError(null); setView('start'); }}
           onComplete={handleCompleteRegistration}
-        />
-      )}
-
-      {view === 'success' && currentUser && (
-        <SuccessAndMatchView
+          submitting={submitting}
+          serverError={error}
+        />}
+        {view === 'success' && currentUser && <SuccessAndMatchView
           currentUser={currentUser}
-          foundMatches={userMatches}
+          matches={matches}
+          sessionSaved={sessionSaved}
+          refreshing={refreshing}
+          pendingMatch={pendingMatch}
+          error={error}
+          onRefresh={() => void refreshMatches()}
+          onAccept={(id) => void handleAccept(id)}
           onBackToHome={() => setView('start')}
-          onUpdateMatchAcceptance={handleUpdateMatchAcceptance}
-        />
-      )}
-
-      {view === 'admin' && isAdminLoggedIn && (
-        <AdminDashboard
-          profiles={profiles}
-          matches={allMatches}
-          onBack={() => setView('start')}
-          onLogout={handleLogout}
-          onResetSeed={handleResetSeed}
-          onUpdateMatchPair={handleUpdateMatchAcceptance}
-        />
-      )}
-
-      {/* Organizer Login Modal */}
-      <AdminLoginModal
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-        onLoginSuccess={handleLoginSuccess}
-      />
+        />}
+      </>}
     </div>
   );
 }
