@@ -23,10 +23,9 @@ export function validate(input) {
   p[key] = input[key];
  }
  if (p.minAge > p.maxAge) throw new InputError('Confira a faixa etária desejada.');
- for (const key of ['gender','seeking']) {
-  if (!['homem','mulher','qualquer'].includes(input[key]) || (key==='gender' && input[key]==='qualquer')) throw new InputError('Confira as preferências de conexão.');
-  p[key] = input[key];
- }
+ if (!['homem','mulher'].includes(input.gender)) throw new InputError('Informe homem ou mulher.');
+ p.gender=input.gender;
+ p.seeking=p.gender==='homem'?'mulher':'homem';
  for (const key of ['member','servedMission']) {
   if (typeof input[key] !== 'boolean') throw new InputError('Responda os campos complementares.');
   p[key]=input[key];
@@ -34,7 +33,7 @@ export function validate(input) {
  if (input.consent !== true) throw new InputError('É necessário autorizar o uso dos dados para participar.');
  if (typeof input.email !== 'string' || input.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) throw new InputError('Informe um e-mail válido.');
  p.email = input.email.trim().toLowerCase();
- p.consent=true; p.consentVersion='2026-11-14-v1'; p.questionnaireVersion='brooklin-v1';
+ p.consent=true; p.consentVersion='2026-11-14-v2'; p.questionnaireVersion='brooklin-v1';
  if (input.photo) {
   if (typeof input.photo !== 'string' || input.photo.length > 300000 || !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(input.photo)) throw new InputError('Use uma foto JPG reduzida (até 300 KB).');
   let bytes; try { bytes=atob(input.photo.split(',')[1]); } catch { throw new InputError('Foto inválida.'); }
@@ -47,6 +46,7 @@ export function validate(input) {
 // two structured answers contribute to this transparent, deterministic estimate.
 export function compatibility(a,b) {
  if (a.id===b.id || a.questionnaireVersion!==b.questionnaireVersion) return null;
+ if (!['homem','mulher'].includes(a.gender) || !['homem','mulher'].includes(b.gender) || a.gender===b.gender) return null;
  if ((a.seeking!=='qualquer' && a.seeking!==b.gender) || (b.seeking!=='qualquer' && b.seeking!==a.gender)) return null;
  if (a.age<b.minAge || a.age>b.maxAge || b.age<a.minAge || b.age>a.maxAge) return null;
  const x=hobbyTags(a.hobbies), y=hobbyTags(b.hobbies), common=x.filter(t=>y.includes(t));
@@ -57,10 +57,13 @@ export function compatibility(a,b) {
 export function visibleMatch(me,candidate,accepted,partnerAccepted) {
  const result=compatibility(me,candidate); if (!result) return null;
  const mutual=accepted && partnerAccepted;
- const partner={name:candidate.name,age:candidate.age,stake:candidate.stake,profession:candidate.profession,education:candidate.education,hobbies:candidate.hobbies,strengths:candidate.strengths,curiosity:candidate.curiosity,pitch:candidate.pitch};
- if (candidate.photo) partner.photo=candidate.photo;
- if (mutual) partner.email=candidate.email;
- return {id:candidate.id,...result,accepted,mutual,partner};
+ const partner={};
+ if (mutual) {
+  for (const [key] of QUESTIONS) partner[key]=candidate[key];
+  partner.email=candidate.email;
+  if (candidate.photo) partner.photo=candidate.photo;
+ }
+ return {id:candidate.id,score:result.score,accepted,mutual,partner};
 }
 export async function digest(s) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join(''); }
 export function newToken() { return [...crypto.getRandomValues(new Uint8Array(32))].map(b=>b.toString(16).padStart(2,'0')).join(''); }

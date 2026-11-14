@@ -1,4 +1,5 @@
 import { validate, compatibility, visibleMatch, digest, newToken, InputError } from './domain.mjs';
+import {mailMessage,mailAccessToken} from './mail.mjs';
 const env = (name: string) => Deno.env.get(name);
 const base = env('SUPABASE_URL')!;
 const secret = env('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -17,9 +18,12 @@ async function sendPending() {
  if (!mailReady()) return;
  const queue=await rpc({p_action:'mail_claim'});
  for (const item of queue) {
-  // No names, answers, or contact of the partner leave the app in notifications.
-  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${env('RESEND_API_KEY')}`,'Content-Type':'application/json','Idempotency-Key':`match-${item.recipient}-${item.partner}`},body:JSON.stringify({from:env('MAIL_FROM'),to:[item.email],subject:'Você tem uma nova conexão 💌',text:'Encontramos uma compatibilidade acima de 70%. Acesse https://shellenorteney.github.io/Encontro-Marcado/ e use seu código de acesso para ver o match. Os e-mails só são compartilhados quando ambos autorizam.'}),signal:AbortSignal.timeout(10000)});
-  if (r.ok) await rpc({p_action:'mail_sent',p_source:item.recipient,p_target:item.partner});
+  const access=await mailAccessToken(secret,item.recipient);
+  await rpc({p_action:'mail_access',p_target:item.recipient,p_source:await digest(access)});
+  const link=`https://shellenorteney.github.io/Encontro-Marcado/#access=${access}&match=${item.partner}`;
+  const message=mailMessage(item,link);
+  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${env('RESEND_API_KEY')}`,'Content-Type':'application/json','Idempotency-Key':`${item.kind}-${item.recipient}-${item.partner}`},body:JSON.stringify({from:env('MAIL_FROM'),to:[item.email],...message}),signal:AbortSignal.timeout(10000)});
+  if (r.ok) await rpc({p_action:'mail_sent',p_source:item.recipient,p_target:item.partner,p_profile:{kind:item.kind}});
  }
 }
 Deno.serve(async req => {

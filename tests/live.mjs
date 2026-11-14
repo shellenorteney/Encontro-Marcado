@@ -9,10 +9,19 @@ try{
  const b=await call('register',null,{profile:fixture({name:'QA sintético B',gender:'homem',seeking:'mulher',email:'qa-b@example.invalid'})});tokens.push(b.token);
  assert.ok(b.matches.some(m=>m.id===a.profile.id));
  let sa=await call('me',a.token);let m=sa.matches.find(m=>m.id===b.profile.id);assert.equal(m.score,100);assert.equal(m.partner.email,undefined);
+ assert.deepEqual(m.partner,{});
  sa=await call('accept',a.token,{matchId:b.profile.id});m=sa.matches.find(m=>m.id===b.profile.id);assert.equal(m.accepted,true);assert.equal(m.mutual,false);assert.equal(m.partner.email,undefined);
  let sb=await call('matches',b.token);assert.equal(sb.matches.find(m=>m.id===a.profile.id).partner.email,undefined);
+ assert.deepEqual(sb.matches.find(m=>m.id===a.profile.id).partner,{});
  sb=await call('accept',b.token,{matchId:a.profile.id});assert.equal(sb.matches.find(m=>m.id===a.profile.id).partner.email,'qa-a@example.invalid');
  sa=await call('matches',a.token);assert.equal(sa.matches.find(m=>m.id===b.profile.id).partner.email,'qa-b@example.invalid');
+ assert.equal(sa.matches.find(m=>m.id===b.profile.id).partner.name,'QA sintético B');
+ const c=await call('register',null,{profile:fixture({name:'QA sintético C',gender:'mulher',seeking:'mulher',email:'qa-c@example.invalid'})});tokens.push(c.token);
+ assert.ok(!c.matches.some(m=>m.id===a.profile.id),'Women must never match with women, even with a forged seeking field');
+ assert.equal(c.profile.seeking,'homem');
+ const d=await call('register',null,{profile:fixture({name:'QA sintético D',gender:'homem',email:'qa-d@example.invalid'})});tokens.push(d.token);
+ await Promise.all([call('accept',c.token,{matchId:d.profile.id}),call('accept',d.token,{matchId:c.profile.id})]);
+ const sc=await call('matches',c.token);assert.equal(sc.matches.find(m=>m.id===d.profile.id).mutual,true);
  const bad=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'me'})});assert.equal(bad.status,401);
  console.log('PASS: shared persistence, restored session, 100% match, bilateral consent, contact privacy and unauthorized access.');
 }finally{for(const token of tokens)await call('delete',token);console.log('Synthetic profiles deleted.');}
