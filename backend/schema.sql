@@ -65,7 +65,7 @@ begin
   ), claimed as (
    update connection_private.mail_jobs q set claimed_at=now(),attempts=q.attempts+1
    from batch where q.recipient=batch.recipient and q.partner=batch.partner and q.kind=batch.kind returning q.*
-  ) select coalesce(jsonb_agg(jsonb_build_object('recipient',c.recipient,'partner',c.partner,'kind',c.kind,'email',p.profile->>'email',
+  ) select coalesce(jsonb_agg(jsonb_build_object('recipient',c.recipient,'partner',c.partner,'kind',c.kind,'email',p.profile->>'email','recipientName',p.profile->>'name',
     'mutual',c.kind='profile','profile',case when c.kind='profile' then b.profile else null end)),'[]'::jsonb)
   from claimed c join connection_private.profiles p on p.id=c.recipient join connection_private.profiles b on b.id=c.partner);
  end if;
