@@ -36,3 +36,9 @@ node scripts/serve.mjs
 Fonte em site/; dist/ é o artefato estático. O build também sincroniza index.html e web/ para compatibilidade com Pages na raiz. src/ contém o protótipo antigo e não entra no artefato ativo. GitHub Actions verifica sintaxe, testes e publica em Pages. O código continua no repositório Encontro-Marcado. Uma segunda hospedagem Sites está sendo preparada para usar endereço sem o nome pessoal.
 
 node tests/live.mjs testa o fluxo antigo. node tests/live-choices.mjs testa o cadastro novo e o novo Origin com registros sintéticos removidos ao final. Não usar endereços reais nessas fixtures. Os testes de templates de e-mail não enviam mensagens.
+
+## Endereço sem nome pessoal
+
+Publicado em https://encontro-marcado-conexoes.slowgenet.chatgpt.site (Sites, acesso público). Identidade do projeto e fonte sincronizada ficam na pasta irmã encontro-marcado-site/.openai/hosting.json. Atualizações nessa hospedagem precisam ser empacotadas e publicadas pelo fluxo Sites; o push ao GitHub publica somente a cópia GitHub Pages. A versão 1 do Sites usa o mesmo frontend e backend desta revisão. A origem nova está autorizada no backend e é o endereço usado pelos links dos e-mails futuros.
+
+Verificações: 18 testes locais, teste integrado do cadastro novo no Supabase com registros sintéticos removidos, revisão visual da página inicial e passagem pelas quatro etapas sem gravar o perfil visual. Foram conferidos campos condicionais, limite de três pontos fortes e inclusão de uma alternativa própria.
