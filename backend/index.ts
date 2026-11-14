@@ -1,9 +1,11 @@
 import { validate, compatibility, visibleMatch, digest, newToken, InputError } from './domain.mjs';
 import {mailMessage,mailAccessToken} from './mail.mjs';
+import {mailProvider,createMailer} from './delivery.mjs';
 const env = (name: string) => Deno.env.get(name);
 const base = env('SUPABASE_URL')!;
 const secret = env('SUPABASE_SERVICE_ROLE_KEY')!;
-const mailReady = () => !!(env('RESEND_API_KEY') && env('MAIL_FROM'));
+const mailReady = () => !!mailProvider(env);
+const deliver=createMailer(env);
 async function rpc(data: Record<string,unknown>) {
  const r=await fetch(`${base}/rest/v1/rpc/connection_rpc`,{method:'POST',headers:{apikey:secret,Authorization:`Bearer ${secret}`,'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(15000)});
  const result=await r.json();
@@ -22,8 +24,8 @@ async function sendPending() {
   await rpc({p_action:'mail_access',p_target:item.recipient,p_source:await digest(access)});
   const link=`https://encontro-marcado-conexoes.slowgenet.chatgpt.site/#access=${access}&match=${item.partner}`;
   const message=mailMessage(item,link);
-  const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${env('RESEND_API_KEY')}`,'Content-Type':'application/json','Idempotency-Key':`${item.kind}-${item.recipient}-${item.partner}`},body:JSON.stringify({from:env('MAIL_FROM'),to:[item.email],...message}),signal:AbortSignal.timeout(10000)});
-  if (r.ok) await rpc({p_action:'mail_sent',p_source:item.recipient,p_target:item.partner,p_profile:{kind:item.kind}});
+  await deliver(item,message);
+  await rpc({p_action:'mail_sent',p_source:item.recipient,p_target:item.partner,p_profile:{kind:item.kind}});
  }
 }
 Deno.serve(async req => {
@@ -43,7 +45,7 @@ Deno.serve(async req => {
   const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length;}
   let body;try{body=JSON.parse(new TextDecoder().decode(bytes));}catch{return json({error:'JSON inválido.'},400);}
   if (!body || typeof body!=='object') return json({error:'Dados inválidos.'},400);
-  if (body.action==='status') return json({ready:true,emailConfigured:mailReady(),questionnaireVersion:'choices-v2'});
+  if (body.action==='status') return json({ready:true,emailConfigured:mailReady(),emailProvider:mailProvider(env),questionnaireVersion:'choices-v2'});
   if (!['register','me','matches','accept','delete'].includes(body.action)) return json({error:'Ação inválida.'},400);
   let token, snapshot;
   if (body.action==='register') {

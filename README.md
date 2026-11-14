@@ -44,3 +44,9 @@ Publicado em https://encontro-marcado-conexoes.slowgenet.chatgpt.site (Sites, ac
 Verificações: 18 testes locais, teste integrado do cadastro novo no Supabase com registros sintéticos removidos, revisão visual da página inicial e passagem pelas quatro etapas sem gravar o perfil visual. Foram conferidos campos condicionais, limite de três pontos fortes e inclusão de uma alternativa própria.
 
 Ser membro, ala e estaca são somente informações do perfil pessoal. Não são preferências e não alteram a pontuação, inclusive para preferências antigas já salvas. Perfis antigos que só tinham esses critérios usam interesses e missão como fallback. A interface mantém ala/estaca condicionais para quem é membro.
+
+## Envio direto pelo Gmail (alternativa ao Resend)
+
+O backend aceita GMAIL_USER e GMAIL_APP_PASSWORD nos Secrets do Supabase, com preferência por Gmail quando ambos estão configurados. O remetente é Encontro Marcado <encontromarcadoinstituto@gmail.com>, usando o endereço configurado em GMAIL_USER. Requer senha de app da conta Google com verificação em duas etapas; nunca usar a senha normal nem colocar credenciais no código. Não requer domínio próprio ou Resend. O transporte usa smtp.gmail.com:465 com TLS verificado e Nodemailer 10.5.0 fixado, carregado apenas quando configurado. HTML e fotos anexadas são mantidos.
+
+O Gmail tem limites de envio e pode bloquear acessos automatizados; é uma alternativa inicial, não um serviço de envio em massa. SMTP não garante deduplicação no provedor: uma resposta ambígua após envio pode gerar repetição em um retry. A fila usa claim e Message-ID estável. emailConfigured indica somente presença de configuração; emailProvider mostra gmail, resend ou null. Entrega real precisa ser verificada após a usuária salvar os segredos. Não há alegação de envio confirmado antes desse teste.
