@@ -17,7 +17,7 @@ Backend hospedado no Supabase: projeto kcejmkympweqmfdlglaz, função connection
 
 Envio real de e-mails ainda NÃO configurado/testado. Faltam RESEND_API_KEY e MAIL_FROM de um domínio verificado, configurados apenas nos Secrets do Supabase. O endpoint status informa emailConfigured:false; a interface avisa essa pendência. Ter credenciais configuradas não comprova entrega: testar com destinatário autorizado após ativar.
 
-A publicação do frontend no GitHub Pages continua bloqueada: a conexão do GitHub retornou 403 ao gravar e o Git local não possui autenticação. O endereço pretendido é https://shellenorteney.github.io/Encontro-Marcado/ ; não é uma afirmação de que esta versão esteja publicada.
+Frontend publicado e verificado em https://shellenorteney.github.io/Encontro-Marcado/ em 14/11/2026. Os commits 6bfbe91 e dccaa83 foram enviados para main; testes e deploy do GitHub Actions passaram. Página inicial, JavaScript, CSS e módulo de perguntas responderam HTTP 200. O envio de e-mails continua pendente de configuração.
 
 ## Executar
 
