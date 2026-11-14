@@ -53,7 +53,7 @@ export function compatibility(a,b) {
  if (a.age<b.minAge || a.age>b.maxAge || b.age<a.minAge || b.age>a.maxAge) return null;
  if(a.desired || b.desired){const raw=Math.min(preferenceScore(a,b),preferenceScore(b,a));return raw>70?{score:Math.round(raw*100)/100,common:[]}:null;}
  const x=hobbyTags(a.hobbies), y=hobbyTags(b.hobbies), common=x.filter(t=>y.includes(t));
- const raw=70*(2*common.length/(x.length+y.length || 1)) + (a.member===b.member?15:0) + (a.servedMission===b.servedMission?15:0);
+ const raw=70*(2*common.length/(x.length+y.length || 1)) + (a.servedMission===b.servedMission?30:0);
  if (raw<=70) return null;
  return {score:Math.round(raw*100)/100,common};
 }
@@ -71,21 +71,23 @@ function validateChoices(input){
  p.missionLocation=p.servedMission?cleanText(input.missionLocation,'Onde serviu missão',true):'';p.mission=p.servedMission?`Sim — ${p.missionLocation}`:'Não';
  p.hobbyChoices=choices(input.hobbyChoices,'Hobbies',1);p.strengthChoices=choices(input.strengthChoices,'Pontos fortes',3,3);p.hobbies=p.hobbyChoices.join(', ');p.strengths=p.strengthChoices.join(', ');
  const d=input.desired;if(!d||typeof d!=='object'||Array.isArray(d))throw new InputError('Preencha o que você procura.');p.desired={};
- for(const k of ['member','servedMission']){if(!['any','true','false'].includes(d[k]))throw new InputError('Confira o que você procura.');p.desired[k]=d[k];}
+ if(!['any','true','false'].includes(d.servedMission))throw new InputError('Confira o que você procura.');p.desired.servedMission=d.servedMission;
  p.desired.hobbies=choices(d.hobbies,'Hobbies desejados');p.desired.strengths=choices(d.strengths,'Qualidades desejadas',0,3);
- for(const k of ['profession','education','ward','stake'])p.desired[k]=cleanText(d[k],k);
- if(!p.desired.hobbies.length&&!p.desired.strengths.length&&p.desired.member==='any'&&p.desired.servedMission==='any'&&!['profession','education','ward','stake'].some(k=>p.desired[k]))throw new InputError('Escolha ao menos uma característica que procura.');
+ for(const k of ['profession','education'])p.desired[k]=cleanText(d[k],k);
+ if(!p.desired.hobbies.length&&!p.desired.strengths.length&&p.desired.servedMission==='any'&&!['profession','education'].some(k=>p.desired[k]))throw new InputError('Escolha ao menos uma característica que procura.');
  if(typeof input.email!=='string'||input.email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email))throw new InputError('Informe um e-mail válido.');p.email=input.email.toLowerCase();
  if(input.photo){if(typeof input.photo!=='string'||input.photo.length>300000||!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(input.photo))throw new InputError('Foto JPG inválida.');let bytes;try{bytes=atob(input.photo.split(',')[1]);}catch{throw new InputError('Foto inválida.');}if(!bytes.startsWith('\xff\xd8\xff'))throw new InputError('Foto inválida.');p.photo=input.photo;}
  return p;
 }
 export function preferenceScore(person,other){
- if(!person.desired){const x=hobbyTags(person.hobbies),y=hobbyTags(other.hobbies);return 70*2*x.filter(t=>y.includes(t)).length/(x.length+y.length||1)+(person.member===other.member?15:0)+(person.servedMission===other.servedMission?15:0);}
+ if(!person.desired){const x=hobbyTags(person.hobbies),y=hobbyTags(other.hobbies);return 70*2*x.filter(t=>y.includes(t)).length/(x.length+y.length||1)+(person.servedMission===other.servedMission?30:0);}
  const d=person.desired;let score=0,total=0;
  for(const [key,own,weight] of [['hobbies','hobbyChoices',40],['strengths','strengthChoices',30]]){const wanted=d[key].map(normalize);if(wanted.length){total+=weight;const has=(other[own]||String(other[key]||'').split(/[,;\n]+/)).map(normalize);score+=weight*wanted.filter(x=>has.includes(x)).length/wanted.length;}}
- for(const key of ['member','servedMission'])if(d[key]!=='any'){total+=15;if(String(other[key])===d[key])score+=15;}
- for(const key of ['profession','education','ward','stake'])if(d[key]){total+=5;if(normalize(d[key])===normalize(other[key]||''))score+=5;}
- return total?100*score/total:0;
+ if(d.servedMission!=='any'){total+=15;if(String(other.servedMission)===d.servedMission)score+=15;}
+ for(const key of ['profession','education'])if(d[key]){total+=5;if(normalize(d[key])===normalize(other[key]||''))score+=5;}
+ // Older profiles may have selected only the removed membership criteria.
+ // Fall back to their interests instead of making those profiles unmatchable.
+ return total?100*score/total:preferenceScore({...person,desired:undefined},other);
 }
 export function visibleMatch(me,candidate,accepted,partnerAccepted) {
  const result=compatibility(me,candidate); if (!result) return null;

@@ -6,10 +6,10 @@ Site com perfil, alternativas e consentimento bilateral. O frontend usa o cartaz
 
 1. Perfil: nome, idade, homem/mulher, e-mail, membro/não membro. Ala e estaca são obrigatórias somente para membros. Profissão, estudos e foto são opcionais.
 2. Sobre você: hobbies com alternativas e opções próprias; missão sim/não (local somente se sim); exatamente três pontos fortes, incluindo opções próprias; curiosidade aberta. Sem venda seu peixe.
-3. O que procura: as mesmas alternativas de hobbies, qualidades (até três), condição de membro e missão; faixa etária desejada; profissão, estudos, ala e estaca opcionais. Ao menos uma característica deve ser escolhida.
+3. O que procura: as mesmas alternativas de hobbies, qualidades (até três), missão; faixa etária desejada; profissão e estudos opcionais. Ao menos uma característica deve ser escolhida.
 4. Autorização: preserva o consentimento de uso dos dados e exige aceite separado de cada match antes de divulgar perfil/contato.
 
-Somente homem/mulher, idade recíproca e afinidade bruta >70 geram match. O servidor valida todos os limites. No cadastro novo, comparamos as preferências de cada pessoa com o perfil da outra. Hobbies têm peso 40, qualidades 30, membro 15 e missão 15; profissão/estudos/ala/estaca opcionais têm peso 5 cada. Somente critérios escolhidos entram no denominador; hobbies e qualidades usam a proporção atendida. Textos opcionais exigem igualdade normalizada, sem interpretação semântica. O score final é o menor dos dois scores direcionais. Cadastros antigos continuam armazenados e usam o cálculo anterior (hobbies 70, condição de membro 15, missão 15) na sua direção de comparação.
+Somente homem/mulher, idade recíproca e afinidade bruta >70 geram match. O servidor valida todos os limites. No cadastro novo, comparamos as preferências de cada pessoa com o perfil da outra. Hobbies têm peso 40, qualidades 30 e missão 15; profissão/estudos opcionais têm peso 5 cada. Somente critérios escolhidos entram no denominador; hobbies e qualidades usam a proporção atendida. Textos opcionais exigem igualdade normalizada, sem interpretação semântica. O score final é o menor dos dois scores direcionais. Cadastros antigos continuam armazenados e usam o cálculo anterior (hobbies 70 e missão 30) na sua direção de comparação.
 
 ## Notificações
 
@@ -42,3 +42,5 @@ node tests/live.mjs testa o fluxo antigo. node tests/live-choices.mjs testa o ca
 Publicado em https://encontro-marcado-conexoes.slowgenet.chatgpt.site (Sites, acesso público). Identidade do projeto e fonte sincronizada ficam na pasta irmã encontro-marcado-site/.openai/hosting.json. Atualizações nessa hospedagem precisam ser empacotadas e publicadas pelo fluxo Sites; o push ao GitHub publica somente a cópia GitHub Pages. A versão 1 do Sites usa o mesmo frontend e backend desta revisão. A origem nova está autorizada no backend e é o endereço usado pelos links dos e-mails futuros.
 
 Verificações: 18 testes locais, teste integrado do cadastro novo no Supabase com registros sintéticos removidos, revisão visual da página inicial e passagem pelas quatro etapas sem gravar o perfil visual. Foram conferidos campos condicionais, limite de três pontos fortes e inclusão de uma alternativa própria.
+
+Ser membro, ala e estaca são somente informações do perfil pessoal. Não são preferências e não alteram a pontuação, inclusive para preferências antigas já salvas. Perfis antigos que só tinham esses critérios usam interesses e missão como fallback. A interface mantém ala/estaca condicionais para quem é membro.
