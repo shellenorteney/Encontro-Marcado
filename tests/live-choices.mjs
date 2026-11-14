@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';import {choiceFixture} from './choices.test.mjs';
+const endpoint='https://kcejmkympweqmfdlglaz.supabase.co/functions/v1/connection-v2';const tokens=[];
+async function call(action,token,extra={}){const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://encontro-marcado-conexoes.slowgenet.chatgpt.site',...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify({action,...extra})});const result=await r.json();if(!r.ok)throw Error(`${r.status}: ${result.error}`);return result;}
+try{const a=await call('register',null,{profile:choiceFixture({name:'QA novo A'})});tokens.push(a.token);assert.equal(a.profile.profession,'');assert.equal(a.profile.ward,'');assert.equal(a.profile.pitch,undefined);
+ const b=await call('register',null,{profile:choiceFixture({name:'QA novo B',gender:'homem'})});tokens.push(b.token);assert.equal(b.matches.find(m=>m.id===a.profile.id).score,100);assert.deepEqual(b.matches.find(m=>m.id===a.profile.id).partner,{});
+ await Promise.all([call('accept',a.token,{matchId:b.profile.id}),call('accept',b.token,{matchId:a.profile.id})]);const fresh=await call('me',a.token);assert.equal(fresh.profile.hobbyChoices[0],'Dançar');assert.equal(fresh.matches.find(m=>m.id===b.profile.id).partner.name,'QA novo B');
+ const invalid=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'register',profile:choiceFixture({strengthChoices:['Leal','A','B','C']})})});assert.equal(invalid.status,400);
+ console.log('PASS: new origin CORS, alternatives persisted, optional fields, reciprocal preferences, private profiles, simultaneous accept, server strength limit.');
+}finally{for(const token of tokens)await call('delete',token);console.log('Synthetic profiles deleted.');}

@@ -20,7 +20,7 @@ async function sendPending() {
  for (const item of queue) {
   const access=await mailAccessToken(secret,item.recipient);
   await rpc({p_action:'mail_access',p_target:item.recipient,p_source:await digest(access)});
-  const link=`https://shellenorteney.github.io/Encontro-Marcado/#access=${access}&match=${item.partner}`;
+  const link=`https://encontro-marcado-conexoes.slowgenet.chatgpt.site/#access=${access}&match=${item.partner}`;
   const message=mailMessage(item,link);
   const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${env('RESEND_API_KEY')}`,'Content-Type':'application/json','Idempotency-Key':`${item.kind}-${item.recipient}-${item.partner}`},body:JSON.stringify({from:env('MAIL_FROM'),to:[item.email],...message}),signal:AbortSignal.timeout(10000)});
   if (r.ok) await rpc({p_action:'mail_sent',p_source:item.recipient,p_target:item.partner,p_profile:{kind:item.kind}});
@@ -28,7 +28,7 @@ async function sendPending() {
 }
 Deno.serve(async req => {
  const origin=req.headers.get('origin');
- const allowed=!origin || origin==='https://shellenorteney.github.io' || /^http:\/\/(localhost|127\.0\.0\.1):3000$/.test(origin);
+ const allowed=!origin || origin==='https://shellenorteney.github.io' || origin==='https://encontro-marcado-conexoes.slowgenet.chatgpt.site' || /^http:\/\/(localhost|127\.0\.0\.1):3000$/.test(origin);
  const headers:Record<string,string>={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Vary':'Origin','X-Content-Type-Options':'nosniff'};
  if (origin && allowed) Object.assign(headers,{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'authorization, content-type','Access-Control-Allow-Methods':'POST, OPTIONS'});
  const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
@@ -43,7 +43,7 @@ Deno.serve(async req => {
   const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length;}
   let body;try{body=JSON.parse(new TextDecoder().decode(bytes));}catch{return json({error:'JSON inválido.'},400);}
   if (!body || typeof body!=='object') return json({error:'Dados inválidos.'},400);
-  if (body.action==='status') return json({ready:true,emailConfigured:mailReady(),questionnaireVersion:'brooklin-v1'});
+  if (body.action==='status') return json({ready:true,emailConfigured:mailReady(),questionnaireVersion:'choices-v2'});
   if (!['register','me','matches','accept','delete'].includes(body.action)) return json({error:'Ação inválida.'},400);
   let token, snapshot;
   if (body.action==='register') {
